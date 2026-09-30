@@ -58,5 +58,12 @@ class Settings(BaseSettings):
     # (0 disables). Prevents one long article from flooding the context.
     max_chunks_per_slug: int = 1
 
+    # Second-stage reranking (Phase 2c): a cross-encoder reads question and
+    # candidate together and reorders them. Off by default because it trades
+    # latency for accuracy — measure with scripts/run_eval before enabling.
+    rerank_enabled: bool = False
+    rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
+    rerank_batch_size: int = 32
+
 
 settings = Settings()

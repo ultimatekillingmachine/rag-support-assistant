@@ -161,6 +161,40 @@ scripts/             command-line helpers (index building, asking, evaluation)
 tests/               32 automatic tests
 ```
 
+### Re-ranking results (second pass over the candidates)
+
+The first search compares the question and each piece **separately** — that is
+what makes it fast enough to look through the whole base. A **re-ranker**
+(a "cross-encoder") reads the question and one candidate **together** and
+judges how well they match. It is much slower, so it runs only on the short
+list the first stage produced.
+
+It ships **switched off**, and on this data set it should stay that way.
+Measured on all 56 questions (`jinaai/jina-reranker-v2-base-multilingual`, CPU):
+
+| mode | hit@1 | hit@3 | MRR | avg response time |
+|---|---|---|---|---|
+| vector + gate (**default**) | **0.941** | **1.000** | **0.971** | 186 ms |
+| hybrid | 0.941 | 0.961 | 0.960 | 204 ms |
+| vector + re-rank | 0.843 | 0.980 | 0.913 | **9 847 ms** |
+| vector + re-rank + gate (0.8) | 0.176 | 0.176 | 0.176 | 9 637 ms |
+
+Two honest lessons, both are good interview material:
+
+1. **A re-ranker is not automatically an improvement.** Here it made the first
+   position *worse* (0.941 → 0.843) while becoming **50× slower**. A likely
+   reason: this cross-encoder is trained mostly on English data and disagrees
+   with the embedding model on Russian paraphrases. The lesson: always measure
+   on *your own* data before adopting an extra stage.
+2. **A threshold calibrated for one model does not transfer to another.**
+   Reusing the cosine threshold 0.80 for cross-encoder scores refused 42 of 51
+   real questions (cross-encoder scores live on a different scale). Thresholds
+   must be re-calibrated per scoring model — hence `scripts/gate_report` is
+   part of the repository rather than a one-off experiment.
+
+Turn it on only if your own evaluation says it helps (`RERANK_ENABLED=true` in
+`.env`), and re-run `gate_report` first to pick a matching threshold.
+
 ## Troubleshooting
 
 **Windows: `ONNXRuntimeError: External data path escapes model directory`**
@@ -184,7 +218,8 @@ It is cached and reused afterwards. For a lighter setup set
 - [x] Read the help articles, split them, build the search index, answer with sources (`POST /ask`)
 - [x] Quality measurement: comparison of search modes, confidence-threshold report
 - [x] Combined meaning + keyword search, confidence check, one piece per article
-- [ ] Better re-ranking of results, streaming answers, follow-up questions
+- [x] Optional re-ranking stage (measured: on this data it makes results worse and is 50× slower, so it stays off by default)
+- [ ] Streaming answers, follow-up questions
 - [ ] Automatic index refresh, response cache, access rules for internal articles, slow-response statistics, chat interface, public deployment
 - [ ] Russian word-form handling for the keyword search, then re-run the evaluation
 

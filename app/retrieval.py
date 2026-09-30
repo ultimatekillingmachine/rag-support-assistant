@@ -1,9 +1,15 @@
 """Retrieval strategies.
 
-* :class:`VectorRetriever` — the Phase 1 baseline (pure embedding similarity);
+* :class:`VectorRetriever` — pure embedding similarity (default);
 * :class:`HybridRetriever` — BM25 + vector candidates fused with Reciprocal
-  Rank Fusion (Cormack et al., 2009), plus an optional relevance gate that
-  refuses to answer when even the best cosine score is too low.
+  Rank Fusion (Cormack et al., 2009).
+
+Both support three quality controls:
+* a **relevance gate** that refuses to answer when even the best match is too
+  weak (``min_relevance_score``);
+* an optional **cross-encoder reranker** (second stage: cheap search finds
+  candidates, an accurate model reorders them);
+* a **diversity cap** limiting how many pieces of one article may appear.
 
 RRF is used instead of weighted score sums because cosine similarities and
 BM25 scores live on different, uncalibrated scales: RRF only needs *ranks*,
@@ -16,6 +22,7 @@ from typing import Protocol
 
 from app.embeddings import Embedder
 from app.lexical import BM25, tokenize
+from app.rerank import Reranker, rerank_hits
 from app.vectorstore import SearchHit, VectorStore
 
 ChunkKey = tuple[str, int]  # (slug, chunk_index)
@@ -93,20 +100,37 @@ class VectorRetriever:
         candidate_pool: int = 20,
         min_relevance_score: float = 0.0,
         max_chunks_per_slug: int = 1,
+        reranker: Reranker | None = None,
     ) -> None:
         self._store = store
         self._embedder = embedder
         self._candidate_pool = candidate_pool
         self._min_relevance_score = min_relevance_score
         self._max_chunks_per_slug = max_chunks_per_slug
+        self._reranker = reranker
 
     async def retrieve(
         self, query: str, top_k: int, audience: str | None = None
     ) -> list[SearchHit]:
         query_vector = self._embedder.embed_query(query)
         pool = max(top_k, self._candidate_pool)
+        if self._reranker is not None:
+            pool = max(pool, top_k * 4)
         hits = await self._store.search(query_vector, pool, audience=audience)
         best_score = hits[0].score if hits else None
+
+        if self._reranker is not None and hits:
+            scores = self._reranker.score(query, [hit.chunk.text for hit in hits])
+            result = rerank_hits(
+                hits,
+                scores,
+                top_k=top_k,
+                max_chunks_per_slug=self._max_chunks_per_slug,
+            )
+            if not relevance_gate_passed(result.top_score, self._min_relevance_score):
+                return []
+            return result.hits
+
         if not relevance_gate_passed(best_score, self._min_relevance_score):
             return []
         return limit_per_slug(hits, self._max_chunks_per_slug)[:top_k]
@@ -127,6 +151,7 @@ class HybridRetriever:
         vector_weight: float = 1.0,
         lexical_weight: float = 0.5,
         max_chunks_per_slug: int = 1,
+        reranker: Reranker | None = None,
     ) -> None:
         self._store = store
         self._embedder = embedder
@@ -136,6 +161,7 @@ class HybridRetriever:
         self._vector_weight = vector_weight
         self._lexical_weight = lexical_weight
         self._max_chunks_per_slug = max_chunks_per_slug
+        self._reranker = reranker
 
     async def retrieve(
         self, query: str, top_k: int, audience: str | None = None
@@ -146,7 +172,9 @@ class HybridRetriever:
         )
 
         best_vector_score = vector_hits[0].score if vector_hits else None
-        if not relevance_gate_passed(best_vector_score, self._min_relevance_score):
+        if self._reranker is None and not relevance_gate_passed(
+            best_vector_score, self._min_relevance_score
+        ):
             return []
 
         chunks = await self._store.list_chunks(audience=audience)
@@ -180,11 +208,33 @@ class HybridRetriever:
             chunk = by_key.get(key)
             if chunk is not None:
                 results.append(SearchHit(chunk=chunk, score=round(fused_score, 6)))
+
+        if self._reranker is not None and results:
+            scores = self._reranker.score(query, [hit.chunk.text for hit in results])
+            reranked = rerank_hits(
+                results,
+                scores,
+                top_k=top_k,
+                max_chunks_per_slug=self._max_chunks_per_slug,
+            )
+            if not relevance_gate_passed(reranked.top_score, self._min_relevance_score):
+                return []
+            return reranked.hits
+
         return limit_per_slug(results, self._max_chunks_per_slug)[:top_k]
 
 
 def create_retriever(store: VectorStore, embedder: Embedder, config) -> Retriever:
     """Build the configured retriever (see Settings for the knobs)."""
+    reranker: Reranker | None = None
+    if config.rerank_enabled:
+        from app.rerank import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker(
+            model_name=config.rerank_model,
+            batch_size=config.rerank_batch_size,
+        )
+
     if config.hybrid_enabled:
         return HybridRetriever(
             store,
@@ -195,6 +245,7 @@ def create_retriever(store: VectorStore, embedder: Embedder, config) -> Retrieve
             vector_weight=config.vector_weight,
             lexical_weight=config.lexical_weight,
             max_chunks_per_slug=config.max_chunks_per_slug,
+            reranker=reranker,
         )
     return VectorRetriever(
         store,
@@ -202,4 +253,5 @@ def create_retriever(store: VectorStore, embedder: Embedder, config) -> Retrieve
         candidate_pool=config.candidate_pool,
         min_relevance_score=config.min_relevance_score,
         max_chunks_per_slug=config.max_chunks_per_slug,
+        reranker=reranker,
     )

@@ -45,3 +45,26 @@ def stored_chunk(
         chunk_index=index,
         text=text,
     )
+
+
+class FakeReranker:
+    """Deterministic stand-in for a cross-encoder: scores by keyword presence.
+
+    Tests need *some* model that reorders candidates predictably, without
+    downloading ~1 GB of weights. ``positive``/``negative`` control the score
+    range so gate behaviour can be exercised too.
+    """
+
+    name = "fake"
+
+    def __init__(self, keyword: str, positive: float = 0.9, negative: float = 0.1) -> None:
+        self.keyword = keyword
+        self.positive = positive
+        self.negative = negative
+
+    def score(self, query: str, documents: list[str]) -> list[float]:
+        needle = self.keyword.lower()
+        return [
+            self.positive if needle in document.lower() else self.negative
+            for document in documents
+        ]

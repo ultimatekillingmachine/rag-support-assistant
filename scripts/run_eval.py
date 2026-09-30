@@ -22,6 +22,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.embeddings import FastEmbedEmbedder
+from app.rerank import CrossEncoderReranker, Reranker
 from app.retrieval import HybridRetriever, Retriever, VectorRetriever
 from app.vectorstore import create_store
 
@@ -131,6 +132,13 @@ async def run() -> None:
         f"({answerable} answerable, {len(questions) - answerable} out-of-scope)"
     )
 
+    reranker: Reranker | None = None
+    if settings.rerank_enabled:
+        reranker = CrossEncoderReranker(
+            model_name=settings.rerank_model,
+            batch_size=settings.rerank_batch_size,
+        )
+
     modes: list[tuple[str, Retriever]] = [
         (
             "vector",
@@ -178,6 +186,33 @@ async def run() -> None:
             ),
         ),
     ]
+
+    if reranker is not None:
+        modes.append(
+            (
+                "vector+rerank",
+                VectorRetriever(
+                    store,
+                    embedder,
+                    candidate_pool=settings.candidate_pool,
+                    max_chunks_per_slug=settings.max_chunks_per_slug,
+                    reranker=reranker,
+                ),
+            )
+        )
+        modes.append(
+            (
+                "vector+rerank+gate",
+                VectorRetriever(
+                    store,
+                    embedder,
+                    candidate_pool=settings.candidate_pool,
+                    min_relevance_score=settings.min_relevance_score,
+                    max_chunks_per_slug=settings.max_chunks_per_slug,
+                    reranker=reranker,
+                ),
+            )
+        )
 
     header = (
         f"{'mode':<16} {'hit@1':>6} {'hit@3':>6} {'hit@5':>6} {'MRR':>6} "
