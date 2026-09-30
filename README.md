@@ -200,6 +200,49 @@ curl http://127.0.0.1:8000/stats
   single slow request barely moves the mean while being exactly what users
   notice.
 
+### Re-indexing the knowledge base
+
+```bash
+python -m scripts.ingest_kb          # incremental: only new/changed articles
+python -m scripts.ingest_kb --full   # rebuild everything from scratch
+```
+
+Every article is hashed, so unchanged articles are skipped. Measured on the
+29-article corpus:
+
+| Scenario | Re-embedded articles | Time |
+|---|---|---|
+| First build (`--full`) | 29 | **202 s** |
+| Run with no changes | **0** | **0.1 s** |
+| One article edited | **1** | 15 s |
+| One article deleted | 0 (its chunks are removed) | 0.2 s |
+
+Two hashes make this correct rather than merely fast: *revision* detects text
+changes, and *fingerprint* (revision + chunk size + embedding model) also
+invalidates stored vectors when the model changes.
+
+### Deploying with Docker
+
+`docker-compose.yml` starts the production store (Postgres with the `pgvector`
+extension) with one command:
+
+```bash
+docker compose up -d
+```
+
+Then set `STORAGE_BACKEND=postgres` in `.env`. The application creates its
+schema on start-up and also adds columns that are missing from a database
+created by an earlier version (see `_migrate_schema` in `app/vectorstore.py`) —
+a deliberately small substitute for a full migration tool, which is the right
+next step once the schema starts changing often.
+
+Verify a deployment end to end (no token → 401, customer sees public articles
+only, operator reaches internal ones):
+
+```bash
+python -m scripts.smoke_api http://127.0.0.1:8000
+```
+
 ## Troubleshooting
 
 **Windows: `ONNXRuntimeError: External data path escapes model directory`**
@@ -224,8 +267,11 @@ It is cached and reused afterwards. For a lighter setup set
 - [x] Quality measurement: comparison of search modes, confidence-threshold report
 - [x] Combined meaning + keyword search, confidence check, one piece per article
 - [x] Optional re-ranking stage (measured: on this data it makes results worse and is 50× slower, so it stays off by default)
-- [ ] Streaming answers, follow-up questions
-- [ ] Automatic index refresh, response cache, access rules for internal articles, slow-response statistics, chat interface, public deployment
+- [x] Role-based access: clients cannot request internal articles any more
+- [x] Response cache (0 ms for repeated questions) and latency percentiles (`/stats`)
+- [x] Incremental re-indexing (202 s → 0.1 s when nothing changed)
+- [ ] Streaming answers and follow-up questions
+- [ ] Chat interface and public deployment
 - [ ] Russian word-form handling for the keyword search, then re-run the evaluation
 
 ## Notes
