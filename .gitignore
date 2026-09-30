@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Env
+.env
+.env.local
+
+# Local data (sqlite db, caches)
+data/*.db
+data/*.db-journal
+data/cache/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/

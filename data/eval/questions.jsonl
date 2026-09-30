@@ -1,0 +1,59 @@
+{"id": "q01", "question": "Сколько идёт доставка в Москву и Московскую область?", "expected_slugs": ["delivery-regions-time"], "audience": "customer"}
+{"id": "q02", "question": "Какие сроки доставки в удалённые регионы, например на Камчатку?", "expected_slugs": ["delivery-regions-time"], "audience": "customer"}
+{"id": "q03", "question": "Доступна ли доставка в день заказа?", "expected_slugs": ["delivery-regions-time"], "audience": "customer"}
+{"id": "q04", "question": "Как отследить статус моего заказа?", "expected_slugs": ["delivery-tracking"], "audience": "customer"}
+{"id": "q05", "question": "Курьер не приехал в согласованный слот, что делать?", "expected_slugs": ["delivery-failed"], "audience": "customer"}
+{"id": "q06", "question": "Сколько дней заказ может храниться в пункте выдачи?", "expected_slugs": ["delivery-pickup-points"], "audience": "customer"}
+{"id": "q07", "question": "Сколько стоит самовывоз из пункта выдачи?", "expected_slugs": ["delivery-pickup-points"], "audience": "customer"}
+{"id": "q08", "question": "Заказ потерялся у перевозчика, какие варианты решения?", "expected_slugs": ["delivery-failed"], "audience": "customer"}
+{"id": "q09", "question": "Поднимете ли холодильник на 7 этаж без лифта и сколько это стоит?", "expected_slugs": ["delivery-large-items"], "audience": "customer"}
+{"id": "q10", "question": "Сколько стоит подключение стиральной машины при доставке?", "expected_slugs": ["delivery-large-items"], "audience": "customer"}
+{"id": "q11", "question": "Можно ли сдать старую технику на утилизацию при получении новой?", "expected_slugs": ["delivery-large-items"], "audience": "customer"}
+{"id": "q12", "question": "Как оформить заказ на сайте?", "expected_slugs": ["order-how-to-place"], "audience": "customer"}
+{"id": "q13", "question": "Сколько времени занимает сборка заказа на складе?", "expected_slugs": ["order-how-to-place"], "audience": "customer"}
+{"id": "q14", "question": "Можно ли изменить адрес доставки после оформления заказа?", "expected_slugs": ["order-change"], "audience": "customer"}
+{"id": "q15", "question": "Как отменить заказ, пока он ещё собирается?", "expected_slugs": ["order-cancel"], "audience": "customer"}
+{"id": "q16", "question": "Что значит статус «В пункте выдачи»?", "expected_slugs": ["order-status"], "audience": "customer"}
+{"id": "q17", "question": "Можно ли отменить доставку крупногабаритной техники с установкой?", "expected_slugs": ["order-cancel"], "audience": "customer"}
+{"id": "q18", "question": "Какие способы оплаты вы принимаете?", "expected_slugs": ["payment-methods"], "audience": "customer"}
+{"id": "q19", "question": "Доступна ли оплата при получении?", "expected_slugs": ["payment-methods"], "audience": "customer"}
+{"id": "q20", "question": "Какие условия рассрочки на 12 месяцев — есть ли переплата?", "expected_slugs": ["payment-installment"], "audience": "customer"}
+{"id": "q21", "question": "Можно ли погасить рассрочку досрочно?", "expected_slugs": ["payment-installment"], "audience": "customer"}
+{"id": "q22", "question": "В течение какого срока вернутся деньги на карту при возврате?", "expected_slugs": ["payment-refund-timing"], "audience": "customer"}
+{"id": "q23", "question": "Платёж не прошёл, но деньги списались — что делать?", "expected_slugs": ["payment-failed"], "audience": "customer"}
+{"id": "q24", "question": "Как вернуть товар, если потерял чек?", "expected_slugs": ["returns-howto"], "audience": "customer"}
+{"id": "q25", "question": "В течение какого срока можно вернуть товар, купленный онлайн?", "expected_slugs": ["returns-howto"], "audience": "customer"}
+{"id": "q26", "question": "Какие товары нельзя вернуть?", "expected_slugs": ["returns-howto"], "audience": "customer"}
+{"id": "q27", "question": "Как вернуть стиральную машину — организуете ли вы вывоз?", "expected_slugs": ["returns-large-appliances"], "audience": "customer"}
+{"id": "q28", "question": "Как обменять товар на другую модель?", "expected_slugs": ["returns-exchange"], "audience": "customer"}
+{"id": "q29", "question": "Что делать, если товар оказался с производственным браком?", "expected_slugs": ["returns-defective"], "audience": "customer"}
+{"id": "q30", "question": "Сколько длится диагностика бракованного товара?", "expected_slugs": ["returns-defective"], "audience": "customer"}
+{"id": "q31", "question": "Какая гарантия на холодильники?", "expected_slugs": ["warranty-terms"], "audience": "customer"}
+{"id": "q32", "question": "Какая гарантия на смартфоны?", "expected_slugs": ["warranty-terms"], "audience": "customer"}
+{"id": "q33", "question": "Можно ли продлить гарантию?", "expected_slugs": ["warranty-terms", "account-subscription"], "audience": "customer"}
+{"id": "q34", "question": "Как оформить гарантийный случай?", "expected_slugs": ["warranty-howto"], "audience": "customer"}
+{"id": "q35", "question": "Дадут ли подменный товар на время ремонта?", "expected_slugs": ["warranty-howto", "returns-defective"], "audience": "customer"}
+{"id": "q36", "question": "Телефон упал и треснул экран — это гарантийный случай?", "expected_slugs": ["warranty-not-covered"], "audience": "customer"}
+{"id": "q37", "question": "Залил ноутбук водой — отремонтируют по гарантии?", "expected_slugs": ["warranty-not-covered"], "audience": "customer"}
+{"id": "q38", "question": "Как зарегистрироваться в личном кабинете?", "expected_slugs": ["account-registration"], "audience": "customer"}
+{"id": "q39", "question": "Не приходит SMS-код для входа, что делать?", "expected_slugs": ["account-password-reset"], "audience": "customer"}
+{"id": "q40", "question": "Сколько бонусов начисляется за покупку?", "expected_slugs": ["account-bonus"], "audience": "customer"}
+{"id": "q41", "question": "Когда сгорают бонусы?", "expected_slugs": ["account-bonus"], "audience": "customer"}
+{"id": "q42", "question": "Сколько стоит подписка «ТехноМаркет Плюс» и что она даёт?", "expected_slugs": ["account-subscription"], "audience": "customer"}
+{"id": "q43", "question": "Вернут ли деньги за подписку, если я не сделал ни одного заказа?", "expected_slugs": ["account-subscription"], "audience": "customer"}
+{"id": "q44", "question": "До какого часа работает горячая линия поддержки?", "expected_slugs": ["stores-work-hours"], "audience": "customer"}
+{"id": "q45", "question": "Есть ли шоурумы в Санкт-Петербурге?", "expected_slugs": ["stores-spb-showrooms"], "audience": "customer"}
+{"id": "q46", "question": "Когда оператору нужно эскалировать обращение на уровень L2?", "expected_slugs": ["internal-escalation"], "audience": "operator"}
+{"id": "q47", "question": "Какие компенсации оператор может предложить без согласования руководителя?", "expected_slugs": ["internal-compensation-policy"], "audience": "operator"}
+{"id": "q48", "question": "Можно ли вернуть онлайн-заказ в шоуруме другого города?", "expected_slugs": ["stores-moscow-showrooms", "stores-spb-showrooms"], "audience": "customer"}
+{"id": "q49", "question": "В каком году основан ТехноМаркет?", "expected_slugs": [], "audience": "customer"}
+{"id": "q50", "question": "Есть ли у вас доставка дронами?", "expected_slugs": [], "audience": "customer"}
+{"id": "q51", "question": "Можно ли оплатить заказ криптовалютой?", "expected_slugs": [], "audience": "customer"}
+{"id": "q52", "question": "Вы продаёте продукты питания?", "expected_slugs": [], "audience": "customer"}
+{"id": "q53", "question": "Как стать поставщиком ТехноМаркета?", "expected_slugs": [], "audience": "customer"}
+{"id": "q54", "question": "Что означает формат номера заказа TM-XXXXXXXX?", "expected_slugs": ["order-how-to-place"], "audience": "customer"}
+{"id": "q55", "question": "Как оплатить заказ через СБП?", "expected_slugs": ["payment-methods"], "audience": "customer"}
+{"id": "q56", "question": "Что делать, если не пройдена проверка 3-D Secure при оплате?", "expected_slugs": ["payment-failed"], "audience": "customer"}
+
+
+
