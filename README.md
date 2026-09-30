@@ -227,3 +227,8 @@ It is cached and reused afterwards. For a lighter setup set
 
 The help articles are fictional texts written for this project; no third-party documentation is redistributed. Code license: MIT.
 
+**Want to understand how it works?** See the detailed walkthrough (in Russian):
+[`docs/EXPLAINER.ru.md`](docs/EXPLAINER.ru.md) — every term (RAG, embedding,
+chunk, BM25, RRF, cross-encoder, relevance gate, CI) explained in everyday
+words, including why each decision was made and what did not work.
+
