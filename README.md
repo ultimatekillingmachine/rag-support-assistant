@@ -1,5 +1,7 @@
 # Support RAG Assistant
 
+[![CI](https://github.com/ultimatekillingmachine/rag-support-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/ultimatekillingmachine/rag-support-assistant/actions/workflows/ci.yml)
+
 A production-style Retrieval-Augmented Generation assistant that answers customer-support questions **strictly from a product knowledge base**, with citations, honest "not found" behavior, and measurable retrieval quality.
 
 Built as a portfolio project demonstrating the full lifecycle of an LLM application: ingestion → chunking → embeddings → retrieval → grounded generation → evaluation → API/UI/deploy.
