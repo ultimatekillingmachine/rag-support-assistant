@@ -41,6 +41,14 @@ class AskResponse(BaseModel):
     refused: bool = False
     retrieval: str = "vector"
     role: str = "customer"
+    cached: bool = False
+
+
+class StatsResponse(BaseModel):
+    """Service counters: cache effectiveness and latency percentiles."""
+
+    cache: dict[str, float | int]
+    latency: dict[str, float | int]
 
 
 class HealthResponse(BaseModel):

@@ -12,13 +12,15 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, HTTPException
 
 from app.auth import Principal, require_principal
+from app.cache import CachedPipeline, ResponseCache
 from app.config import Settings
 from app.config import settings as default_settings
 from app.embeddings import Embedder, FastEmbedEmbedder
 from app.llm import LLM, LLMError, get_llm
+from app.metrics import LatencyRecorder
 from app.rag import RAGPipeline
 from app.retrieval import Retriever, create_retriever
-from app.schemas import AskRequest, AskResponse, HealthResponse, SourceItem
+from app.schemas import AskRequest, AskResponse, HealthResponse, SourceItem, StatsResponse
 from app.vectorstore import VectorStore, create_store
 
 
@@ -45,18 +47,30 @@ def create_app(
         app.state.retriever = retriever or create_retriever(
             app.state.store, app.state.embedder, config
         )
-        app.state.pipeline = RAGPipeline(
+        base_pipeline = RAGPipeline(
             app.state.retriever,
             app.state.llm,
             default_top_k=config.top_k,
         )
+        app.state.cache = ResponseCache(
+            max_entries=config.cache_max_entries,
+            ttl_seconds=config.cache_ttl_seconds,
+        )
+        app.state.latency = LatencyRecorder()
+        # Caching wraps the pipeline; when disabled the pipeline is used as-is.
+        app.state.pipeline = (
+            CachedPipeline(base_pipeline, app.state.cache, default_top_k=config.top_k)
+            if config.cache_enabled
+            else base_pipeline
+        )
+        app.state.cache_enabled = config.cache_enabled
         yield
         await app.state.store.dispose()
 
     app = FastAPI(
         title="Support RAG Assistant",
         description="Grounded customer-support answers over the «ТехноМаркет» knowledge base.",
-        version="0.3.0",
+        version="0.4.0",
         lifespan=lifespan,
     )
 
@@ -67,6 +81,14 @@ def create_app(
             chunks=await app.state.store.count(),
             embedding_model=config.embedding_model,
             llm_provider=config.llm_provider,
+        )
+
+    @app.get("/stats", response_model=StatsResponse)
+    async def stats() -> StatsResponse:
+        """Cache effectiveness and latency percentiles (no authentication)."""
+        return StatsResponse(
+            cache=app.state.cache.stats(),
+            latency=app.state.latency.snapshot(),
         )
 
     @app.post("/ask", response_model=AskResponse)
@@ -97,6 +119,8 @@ def create_app(
             )
             for ref, hit in enumerate(result.hits, start=1)
         ]
+        # Latency 0 means "served from cache"; record it either way.
+        app.state.latency.record(result.latency_ms)
         return AskResponse(
             answer=result.answer,
             sources=sources,
@@ -107,6 +131,7 @@ def create_app(
             refused=result.refused,
             retrieval=getattr(app.state.retriever, "name", "vector"),
             role=principal.role,
+            cached=result.latency_ms == 0 and app.state.cache_enabled,
         )
 
     return app

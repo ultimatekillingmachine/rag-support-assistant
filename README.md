@@ -178,6 +178,28 @@ Requests without a valid token receive `401`. Set `AUTH_ENABLED=false` only for
 local experiments; `API_TOKEN_*` values are read from the environment, so no
 secret is committed to the repository.
 
+### Performance
+
+```bash
+curl http://127.0.0.1:8000/stats
+```
+
+```json
+{"cache": {"entries": 1, "hits": 1, "misses": 1, "hit_rate": 0.5},
+ "latency": {"count": 2, "avg_ms": 107.0, "p50_ms": 0.0, "p95_ms": 214.0, "max_ms": 214.0}}
+```
+
+* **Response cache.** Repeated questions are answered from memory: the second
+  call of the same question (any letter case) returns in **0 ms** instead of
+  ~200 ms. The cache key includes the audience, so an answer built from internal
+  articles can never be served to a customer. Entries expire after
+  `CACHE_TTL_SECONDS` and the cache evicts the oldest entry beyond
+  `CACHE_MAX_ENTRIES`, so memory stays bounded.
+* **Latency percentiles.** `/stats` reports `p50`/`p95`/`max` over the last
+  thousand requests. Percentiles are used instead of the average because a
+  single slow request barely moves the mean while being exactly what users
+  notice.
+
 ## Troubleshooting
 
 **Windows: `ONNXRuntimeError: External data path escapes model directory`**

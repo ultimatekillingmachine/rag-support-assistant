@@ -76,5 +76,11 @@ class Settings(BaseSettings):
     api_token_customer: str = "customer-token"
     api_token_operator: str = "operator-token"
 
+    # Response cache (Phase 3): repeated questions are answered from memory,
+    # which removes both the LLM cost and hundreds of milliseconds of latency.
+    cache_enabled: bool = True
+    cache_max_entries: int = 256
+    cache_ttl_seconds: float = 900.0
+
 
 settings = Settings()
