@@ -36,21 +36,6 @@ customer question ──► find the most relevant pieces ───────�
 ```
 
 
-## Words used above, in plain language
-
-| Term | What it means here |
-|---|---|
-| **RAG** (Retrieval-Augmented Generation) | The AI first **finds** relevant documents, then **writes** an answer based on them. This is what keeps answers grounded. |
-| **Embedding** | A list of numbers that represents the *meaning* of a text. Texts with similar meaning get similar numbers, so we can compare them mathematically. |
-| **Vector search** | Finding pieces by comparing these numbers. Understands paraphrases. |
-| **Keyword / BM25 search** | Classic search by exact words. Good for codes and exact terms, blind to paraphrases. |
-| **Hybrid search** | Using both searches and merging their results. |
-| **Relevance gate** | A confidence check: if nothing in the help articles is close enough, the assistant refuses to answer. |
-| **Chunk** | A small piece of an article (a few paragraphs). Answers are assembled from pieces, not whole articles. |
-| **LLM** (Large Language Model) | The AI that writes the final answer: here any OpenAI-compatible model (e.g. DeepSeek, OpenAI), a local Ollama model, or an offline test stub. |
-| **Mock** | A simple stand-in used in tests instead of a real AI model, so tests are free and always available. |
-| **CI** (Continuous Integration) | A robot that runs tests automatically after every code change and shows a green/red mark. |
-
 ## What is inside
 
 | Part | What was chosen | Why |
@@ -161,40 +146,6 @@ scripts/             command-line helpers (index building, asking, evaluation)
 tests/               32 automatic tests
 ```
 
-### Re-ranking results (second pass over the candidates)
-
-The first search compares the question and each piece **separately** — that is
-what makes it fast enough to look through the whole base. A **re-ranker**
-(a "cross-encoder") reads the question and one candidate **together** and
-judges how well they match. It is much slower, so it runs only on the short
-list the first stage produced.
-
-It ships **switched off**, and on this data set it should stay that way.
-Measured on all 56 questions (`jinaai/jina-reranker-v2-base-multilingual`, CPU):
-
-| mode | hit@1 | hit@3 | MRR | avg response time |
-|---|---|---|---|---|
-| vector + gate (**default**) | **0.941** | **1.000** | **0.971** | 186 ms |
-| hybrid | 0.941 | 0.961 | 0.960 | 204 ms |
-| vector + re-rank | 0.843 | 0.980 | 0.913 | **9 847 ms** |
-| vector + re-rank + gate (0.8) | 0.176 | 0.176 | 0.176 | 9 637 ms |
-
-Two honest lessons, both are good interview material:
-
-1. **A re-ranker is not automatically an improvement.** Here it made the first
-   position *worse* (0.941 → 0.843) while becoming **50× slower**. A likely
-   reason: this cross-encoder is trained mostly on English data and disagrees
-   with the embedding model on Russian paraphrases. The lesson: always measure
-   on *your own* data before adopting an extra stage.
-2. **A threshold calibrated for one model does not transfer to another.**
-   Reusing the cosine threshold 0.80 for cross-encoder scores refused 42 of 51
-   real questions (cross-encoder scores live on a different scale). Thresholds
-   must be re-calibrated per scoring model — hence `scripts/gate_report` is
-   part of the repository rather than a one-off experiment.
-
-Turn it on only if your own evaluation says it helps (`RERANK_ENABLED=true` in
-`.env`), and re-run `gate_report` first to pick a matching threshold.
-
 ## Troubleshooting
 
 **Windows: `ONNXRuntimeError: External data path escapes model directory`**
@@ -226,9 +177,4 @@ It is cached and reused afterwards. For a lighter setup set
 ## Notes
 
 The help articles are fictional texts written for this project; no third-party documentation is redistributed. Code license: MIT.
-
-**Want to understand how it works?** See the detailed walkthrough (in Russian):
-[`docs/EXPLAINER.ru.md`](docs/EXPLAINER.ru.md) — every term (RAG, embedding,
-chunk, BM25, RRF, cross-encoder, relevance gate, CI) explained in everyday
-words, including why each decision was made and what did not work.
 
