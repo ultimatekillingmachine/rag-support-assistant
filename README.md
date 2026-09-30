@@ -110,7 +110,7 @@ article and 5 that are deliberately **outside** the help articles.
 
 Results with the default settings (`intfloat/multilingual-e5-large`, 5 pieces in context):
 
-| Metric | Result | In plain words |
+| Metric | Result | Notes |
 |---|---|---|
 | hit@3 | **1.000** | The correct article is among the top 3 results for **every** question |
 | hit@1 | 0.941 | The correct article is the very first result for 48 of 51 questions |
