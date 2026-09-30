@@ -65,5 +65,16 @@ class Settings(BaseSettings):
     rerank_model: str = "jinaai/jina-reranker-v2-base-multilingual"
     rerank_batch_size: int = 32
 
+    # Access control (Phase 3): callers authenticate with a bearer token and
+    # the *server* decides which articles they may see. The role is never
+    # taken from the request body, otherwise any client could claim "operator"
+    # and read internal regulations.
+    #   customers -> audience "customer" (public help articles)
+    #   operators -> no audience filter (public + internal articles)
+    # Leave AUTH_ENABLED=false only for local experiments.
+    auth_enabled: bool = True
+    api_token_customer: str = "customer-token"
+    api_token_operator: str = "operator-token"
+
 
 settings = Settings()

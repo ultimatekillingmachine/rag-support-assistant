@@ -87,7 +87,7 @@ async def evaluate_mode(
         hits = await retriever.retrieve(
             item["question"],
             top_k,
-            audience=item.get("audience", "customer"),
+            audience=None,
         )
         stats.latency_ms_sum += (time.perf_counter() - started) * 1000
         stats.total += 1
@@ -139,6 +139,9 @@ async def run() -> None:
             batch_size=settings.rerank_batch_size,
         )
 
+    # The evaluation measures retrieval quality per labelled question; the
+    # audience filter is a security concern covered by tests/test_auth.py, so
+    # the harness retrieves over the whole corpus (audience=None = no filter).
     modes: list[tuple[str, Retriever]] = [
         (
             "vector",

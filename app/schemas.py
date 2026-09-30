@@ -6,6 +6,13 @@ from pydantic import BaseModel, Field
 
 
 class AskRequest(BaseModel):
+    """A question from a caller.
+
+    Note what is *absent*: the client cannot ask for a different article
+    audience. Visibility is decided server-side from the bearer token
+    (see ``app.auth``); the body carries intent only.
+    """
+
     question: str = Field(
         ...,
         min_length=3,
@@ -13,7 +20,6 @@ class AskRequest(BaseModel):
         examples=["Сколько идёт доставка в регионы?"],
     )
     top_k: int | None = Field(default=None, ge=1, le=20)
-    audience: str = Field(default="customer", pattern="^(customer|operator)$")
 
 
 class SourceItem(BaseModel):
@@ -34,6 +40,7 @@ class AskResponse(BaseModel):
     retrieved: int
     refused: bool = False
     retrieval: str = "vector"
+    role: str = "customer"
 
 
 class HealthResponse(BaseModel):

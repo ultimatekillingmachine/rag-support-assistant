@@ -146,6 +146,38 @@ scripts/             command-line helpers (index building, asking, evaluation)
 tests/               32 automatic tests
 ```
 
+### Access control
+
+The knowledge base contains internal articles (`audience: operator`: escalation
+rules, compensation limits). Clients must not be able to read them, so the
+**server** decides what a caller may search — the request body cannot influence
+it.
+
+Authenticate with a bearer token; the role determines the visible articles:
+
+| Token | Role | Sees |
+|---|---|---|
+| `API_TOKEN_CUSTOMER` | customer | public help articles only |
+| `API_TOKEN_OPERATOR` | operator | public **and** internal articles |
+
+```bash
+# customer: internal regulations are filtered out before the model sees them
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Authorization: Bearer customer-token" \
+  -H "Content-Type: application/json" \
+  -d "{\"question\": \"регламент эскалации обращений\"}"
+
+# operator: the same question reaches the internal article
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Authorization: Bearer operator-token" \
+  -H "Content-Type: application/json" \
+  -d "{\"question\": \"регламент эскалации обращений\"}"
+```
+
+Requests without a valid token receive `401`. Set `AUTH_ENABLED=false` only for
+local experiments; `API_TOKEN_*` values are read from the environment, so no
+secret is committed to the repository.
+
 ## Troubleshooting
 
 **Windows: `ONNXRuntimeError: External data path escapes model directory`**

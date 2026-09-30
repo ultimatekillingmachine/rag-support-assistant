@@ -7,9 +7,11 @@ lightweight fakes instead of downloading the embedding model.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 
+from app.auth import Principal, require_principal
 from app.config import Settings
 from app.config import settings as default_settings
 from app.embeddings import Embedder, FastEmbedEmbedder
@@ -54,7 +56,7 @@ def create_app(
     app = FastAPI(
         title="Support RAG Assistant",
         description="Grounded customer-support answers over the «ТехноМаркет» knowledge base.",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=lifespan,
     )
 
@@ -68,13 +70,18 @@ def create_app(
         )
 
     @app.post("/ask", response_model=AskResponse)
-    async def ask(request: AskRequest) -> AskResponse:
+    async def ask(
+        request: AskRequest,
+        principal: Annotated[Principal, Depends(require_principal)],
+    ) -> AskResponse:
         pipeline: RAGPipeline = app.state.pipeline
         try:
             result = await pipeline.answer(
                 request.question,
                 top_k=request.top_k,
-                audience=request.audience,
+                # Visibility comes from the authenticated role, never from the
+                # request body (see app/auth.py).
+                audience=principal.audience_filter,
             )
         except LLMError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -99,6 +106,7 @@ def create_app(
             retrieved=len(result.hits),
             refused=result.refused,
             retrieval=getattr(app.state.retriever, "name", "vector"),
+            role=principal.role,
         )
 
     return app
