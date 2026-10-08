@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.retrieval import (
     HybridRetriever,
     VectorRetriever,
@@ -85,6 +87,25 @@ async def test_hybrid_gate_allows_matching_query(populated_store) -> None:
     hits = await retriever.retrieve("доставка в Москву", top_k=3)
     assert hits
     assert hits[0].chunk.slug == "delivery-time"
+
+
+async def test_hybrid_reports_cosine_scores_not_fusion_scores(populated_store) -> None:
+    """The API field must mean the same thing in both retrieval modes."""
+    store, embedder = populated_store
+    vector_hits = await VectorRetriever(store, embedder).retrieve("доставка в Москву", top_k=3)
+    hybrid_hits = await HybridRetriever(store, embedder).retrieve("доставка в Москву", top_k=3)
+
+    assert hybrid_hits
+    # Cosine similarity is in [0, 1] and clearly larger than an RRF score
+    # (which is on the order of 1/60).
+    assert hybrid_hits[0].score > 0.1
+    assert hybrid_hits[0].score == pytest.approx(vector_hits[0].score, abs=1e-4)
+
+
+async def test_hybrid_orders_by_fusion_but_keeps_known_scores(populated_store) -> None:
+    store, embedder = populated_store
+    hits = await HybridRetriever(store, embedder).retrieve("доставка в москву", top_k=5)
+    assert all(0.0 <= hit.score <= 1.0 for hit in hits)
 
 
 async def test_vector_retriever_gate_refuses_unrelated_query(populated_store) -> None:

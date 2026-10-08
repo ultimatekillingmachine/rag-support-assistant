@@ -208,11 +208,21 @@ class HybridRetriever:
         )
 
         by_key = {(chunk.slug, chunk.chunk_index): chunk for chunk in chunks}
+        # The *order* comes from fusion, but the reported score stays "cosine
+        # similarity to the question" so the field means the same thing in every
+        # retrieval mode (and matches the threshold used by the gate). Pieces
+        # found only by the keyword branch are outside the vector pool and
+        # therefore report 0.0.
+        vector_scores = {
+            (hit.chunk.slug, hit.chunk.chunk_index): hit.score for hit in vector_hits
+        }
         results: list[SearchHit] = []
-        for key, fused_score in fused[: self._candidate_pool]:
+        for key, _fused_score in fused[: self._candidate_pool]:
             chunk = by_key.get(key)
             if chunk is not None:
-                results.append(SearchHit(chunk=chunk, score=round(fused_score, 6)))
+                results.append(
+                    SearchHit(chunk=chunk, score=round(vector_scores.get(key, 0.0), 4))
+                )
 
         if self._reranker is not None and results:
             scores = self._reranker.score(query, [hit.chunk.text for hit in results])

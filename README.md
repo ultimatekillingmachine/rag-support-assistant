@@ -82,6 +82,8 @@ Settings live in `.env` (see `.env.example` for the full list):
 `POST /ask` body: `{"question": "...", "top_k": 5, "history": [{"role": "user", "content": "..."}]}`.
 `history` is optional and limited to 12 messages; the role is taken from the token, never from the body.
 
+Each source carries `slug`, `title`, `category`, `updated_at` and `score` — similarity to the question on a 0…1 scale, the same scale in every retrieval mode (pieces found only by keyword search report 0.0).
+
 ## Quality
 
 The evaluation set is 56 hand-written questions: 51 answerable and 5 deliberately outside the help articles.

@@ -39,12 +39,13 @@ class Settings(BaseSettings):
     chunk_max_chars: int = 1200
     chunk_overlap_chars: int = 150
 
-    # Retrieval mode (Phase 2b): hybrid = vector + BM25 fused with RRF.
-    # Measured on data/eval (56 questions): weighted hybrid ties vector on
-    # hit@1 but trails on hit@3/MRR — BM25's exact-token matching suffers on
-    # Russian morphology. Default stays vector; enable hybrid when exact-term
-    # recall matters more (weights are pre-tuned below). See README.
-    hybrid_enabled: bool = False
+    # Retrieval mode: hybrid = meaning search + keyword (BM25) search fused with
+    # Reciprocal Rank Fusion. Measured on data/eval (56 questions) *after*
+    # Russian stemming was added to the lexical branch: hybrid matches the
+    # vector baseline on hit@1/hit@3 and is slightly better on MRR
+    # (0.971 vs 0.967). Before stemming it lost on hit@3, which is why the
+    # default was vector-only at that point. Weight is pre-tuned below.
+    hybrid_enabled: bool = True
     rrf_k: int = 60
     candidate_pool: int = 20
     # Refuse to answer when even the best cosine score is below this value
