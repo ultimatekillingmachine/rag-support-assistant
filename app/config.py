@@ -1,8 +1,9 @@
 """Application settings loaded from environment / .env file."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,11 +29,14 @@ class Settings(BaseSettings):
 
     # LLM
     llm_provider: Literal["mock", "openai_compatible", "ollama"] = "mock"
-    llm_base_url: str = "https://api.openai.com/v1"
+    llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "deepseek-flash"
     llm_temperature: float = 0.0
     llm_timeout_seconds: float = 60.0
+    # Provider-specific switches forwarded with every request, e.g. DeepSeek's
+    # {"thinking": {"type": "disabled"}} to answer faster.
+    llm_extra_body: dict[str, Any] = Field(default_factory=dict)
 
     # Retrieval / chunking
     top_k: int = 5

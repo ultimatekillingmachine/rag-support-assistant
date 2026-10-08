@@ -72,9 +72,15 @@ class OpenAICompatibleLLM:
         model: str,
         temperature: float = 0.0,
         timeout: float = 60.0,
+        extra_body: dict | None = None,
     ) -> None:
         self.model = model
         self._temperature = temperature
+        # Provider-specific switches merged into every request (for example
+        # DeepSeek's {"thinking": {"type": "disabled"}} to turn off the default
+        # reasoning mode and answer faster). Kept generic: the client only
+        # forwards the dictionary, it does not know any provider's schema.
+        self._extra_body = dict(extra_body or {})
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
@@ -82,15 +88,22 @@ class OpenAICompatibleLLM:
             timeout=timeout,
         )
 
-    async def complete(self, system_prompt: str, user_prompt: str) -> str:
-        payload = {
+    def build_payload(self, system_prompt: str, user_prompt: str, stream: bool) -> dict:
+        """Assemble the request body (separated out so it is unit-testable)."""
+        # extra_body goes first so the core fields below always win.
+        return {
+            **self._extra_body,
             "model": self.model,
             "temperature": self._temperature,
+            "stream": stream,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         }
+
+    async def complete(self, system_prompt: str, user_prompt: str) -> str:
+        payload = self.build_payload(system_prompt, user_prompt, stream=False)
         try:
             response = await self._client.post("/chat/completions", json=payload)
             response.raise_for_status()
@@ -109,15 +122,7 @@ class OpenAICompatibleLLM:
         JSON delta. ``[DONE]`` marks the end. Malformed or empty keep-alive lines
         are skipped rather than raising, because providers send them routinely.
         """
-        payload = {
-            "model": self.model,
-            "temperature": self._temperature,
-            "stream": True,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        }
+        payload = self.build_payload(system_prompt, user_prompt, stream=True)
         try:
             async with self._client.stream(
                 "POST", "/chat/completions", json=payload
@@ -165,5 +170,6 @@ def get_llm(settings: Settings) -> LLM:
             model=settings.llm_model,
             temperature=settings.llm_temperature,
             timeout=settings.llm_timeout_seconds,
+            extra_body=settings.llm_extra_body,
         )
     raise ValueError(f"unknown LLM provider: {settings.llm_provider}")
