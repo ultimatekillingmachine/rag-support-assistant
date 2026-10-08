@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     # BM25 adds exact-term recall as a secondary signal (tuned on data/eval).
     vector_weight: float = 1.0
     lexical_weight: float = 0.25
+    # Stemming for the lexical branch: collapses Russian word forms so that
+    # "доставка"/"доставки" and "треснул"/"трещины" match. Improves recall on
+    # inflected queries; disable to compare against raw exact-token matching.
+    lexical_stemming: bool = True
     # Diversity cap: at most this many chunks of the same article in results
     # (0 disables). Prevents one long article from flooding the context.
     max_chunks_per_slug: int = 1

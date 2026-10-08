@@ -5,10 +5,16 @@
   (OpenAI, OpenRouter, vLLM, ...);
 * ``ollama`` — local models, also via its OpenAI-compatible endpoint
   (http://localhost:11434/v1).
+
+Both real and mock providers support **streaming**: the answer is delivered as
+it is generated, so the first words reach the user in a few hundred milliseconds
+instead of after the whole answer is ready.
 """
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
 from typing import Protocol
 
 import httpx
@@ -16,6 +22,7 @@ import httpx
 from app.config import Settings
 
 CONTEXT_MARKER = "ФРАГМЕНТЫ БАЗЫ ЗНАНИЙ:"
+MOCK_CHUNK_SIZE = 24
 
 
 class LLMError(RuntimeError):
@@ -27,6 +34,8 @@ class LLM(Protocol):
     model: str
 
     async def complete(self, system_prompt: str, user_prompt: str) -> str: ...
+
+    def stream(self, system_prompt: str, user_prompt: str) -> AsyncIterator[str]: ...
 
 
 class MockLLM:
@@ -43,6 +52,12 @@ class MockLLM:
         tail = user_prompt.split(CONTEXT_MARKER, 1)[-1].strip()
         first_block = tail.split("\n\n", 1)[0].strip()
         return f"[mock-ответ]\n{first_block[:600]}"
+
+    async def stream(self, system_prompt: str, user_prompt: str) -> AsyncIterator[str]:
+        """Yield the extractive answer in fixed-size pieces (deterministic)."""
+        answer = await self.complete(system_prompt, user_prompt)
+        for start in range(0, len(answer), MOCK_CHUNK_SIZE):
+            yield answer[start : start + MOCK_CHUNK_SIZE]
 
 
 class OpenAICompatibleLLM:
@@ -87,8 +102,56 @@ class OpenAICompatibleLLM:
         except (KeyError, IndexError, TypeError) as exc:
             raise LLMError(f"unexpected LLM response shape: {data!r}") from exc
 
+    async def stream(self, system_prompt: str, user_prompt: str) -> AsyncIterator[str]:
+        """Yield answer pieces from the server-sent events stream.
+
+        Uses the OpenAI ``stream: true`` protocol: each ``data:`` line carries a
+        JSON delta. ``[DONE]`` marks the end. Malformed or empty keep-alive lines
+        are skipped rather than raising, because providers send them routinely.
+        """
+        payload = {
+            "model": self.model,
+            "temperature": self._temperature,
+            "stream": True,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        try:
+            async with self._client.stream(
+                "POST", "/chat/completions", json=payload
+            ) as response:
+                if response.status_code >= 400:
+                    body = (await response.aread())[:200]
+                    raise LLMError(f"LLM stream failed: HTTP {response.status_code}: {body!r}")
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[len("data:") :].strip()
+                    if not data or data == "[DONE]":
+                        if data == "[DONE]":
+                            break
+                        continue
+                    piece = _extract_delta(data)
+                    if piece:
+                        yield piece
+        except httpx.HTTPError as exc:
+            raise LLMError(f"LLM stream failed: {exc}") from exc
+
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+def _extract_delta(data: str) -> str:
+    """Pull the text delta out of one streamed chunk, ignoring the rest."""
+    try:
+        parsed = json.loads(data)
+        delta = parsed["choices"][0].get("delta") or {}
+        content = delta.get("content")
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return ""
+    return str(content) if content else ""
 
 
 def get_llm(settings: Settings) -> LLM:

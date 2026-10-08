@@ -1,280 +1,141 @@
 # Support RAG Assistant
 
-**English** · [Русский](README.ru.md)
-
 [![CI](https://github.com/ultimatekillingmachine/rag-support-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/ultimatekillingmachine/rag-support-assistant/actions/workflows/ci.yml)
 
-An assistant that answers customer-support questions **using only the company's help articles**, shows which articles it used, and says "I don't know" instead of making things up.
+**English** · [Русский](README.ru.md)
 
-It was built as a portfolio project to show the whole path of an AI feature: from documents to a working service — with quality measured, not just claimed.
+An assistant that answers customer-support questions **only from the company's help articles**, shows which articles it used, and says "I don't know" instead of inventing an answer.
 
-> **Demo data:** a fictional electronics store, "ТехноМаркет", and its support articles (29 articles, 8 sections). The texts are in Russian on purpose — most demo projects only handle English, while real Russian companies need their own language to work well.
-
-## What problem it solves
-
-- **Answers must be trustworthy.** A customer-support bot may not invent delivery times or refund rules. So the assistant answers only from the help articles and always shows its sources.
-- **A plain "search" is not enough.** Customers ask in their own words ("my phone fell and the screen cracked — is that covered?") while the article says "cracks, signs of a fall". The service understands the meaning, not just the exact words.
-- **Honesty beats guessing.** If the question is outside the help articles, the assistant says so and offers to pass the question to a human — instead of producing a confident wrong answer.
+It runs offline out of the box: local embeddings, SQLite, and an offline answer stub. Point it at any OpenAI-compatible model (DeepSeek, OpenAI, a local Ollama) for real answers.
 
 ## How it works
 
 ```
-help articles (knowledge_base/*.md)
-      │  read + split into small pieces
-      ▼
-numbers that represent meaning ──► storage of all pieces (SQLite for development │ Postgres for production)
-                                                             ▲
-customer question ──► find the most relevant pieces ─────────┘
-                      (meaning search │ + exact-word search; confidence check;
-                       no more than one piece per article)
-                                                             │
-                                                             ▼
-                     "answer only from these pieces" ──► AI model (any OpenAI-compatible │ Ollama │ offline mock)
-                                                             │
-                                                             ▼
-                              answer + list of sources + response time
+help articles ─► split into chunks ─► embeddings ─► vector store
+                                                        ▲
+question ─► retrieval (vector │ + BM25, fused by RRF) ──┘
+         ─► relevance gate (nothing close enough ─► refusal)
+         ─► prompt: "answer only from these fragments" ─► LLM
+         ─► answer + numbered sources
 ```
 
+## Features
 
-## What is inside
+| Area | What is included |
+|---|---|
+| Retrieval | meaning search; optional keyword (BM25) search fused with it; confidence gate; at most one chunk per article |
+| Answers | grounded in the retrieved fragments, numbered citations, honest refusal |
+| Dialogue | follow-up questions resolved from the previous turn |
+| Streaming | `POST /ask/stream` (server-sent events) + a small chat page |
+| Access control | bearer tokens; internal articles are invisible to customers |
+| Performance | response cache; latency percentiles via `GET /stats` |
+| Indexing | incremental re-indexing (content + settings fingerprints, schema migration) |
+| Deployment | `Dockerfile` and `docker-compose.yml` (application + Postgres/pgvector) |
 
-| Part | What was chosen | Why |
-|---|---|---|
-| Web service | FastAPI | Fast, modern, automatically documents its own API |
-| Meaning search | `intfloat/multilingual-e5-large` (runs locally) | Good Russian quality, works without paid APIs, no data leaves the machine |
-| Storage | SQLite (development) / Postgres with pgvector (production) | Works right after download; production path prepared in `docker-compose.yml` |
-| Exact-word search | Own small BM25 implementation | No extra dependency; the ranking maths stays readable and testable |
-| AI model | Any OpenAI-compatible endpoint (DeepSeek, OpenAI, OpenRouter), local Ollama, or offline `mock` | The project runs and is tested **without any API key** |
-| Quality control | pytest, ruff, and our own evaluation script | Quality is a number we can watch, not a feeling |
-
-## Quick start (works offline, no API key)
+## Quick start
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate            # Windows
+.venv\Scripts\activate            # Windows (source .venv/bin/activate elsewhere)
 pip install -r requirements.txt
-copy .env.example .env            # defaults: SQLite storage, offline mock AI
-python -m scripts.ingest_kb       # read the help articles and prepare the search index
-uvicorn app.main:app --reload
+copy .env.example .env            # defaults: SQLite + offline stub
+python -m scripts.ingest_kb       # build the search index
+uvicorn app.main:app --reload     # then open http://127.0.0.1:8000
 ```
 
-Then ask a question (or use the automatic API page at http://127.0.0.1:8000/docs):
+The chat page asks for a token (`customer-token` by default). API example:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/ask -H "Content-Type: application/json" -d "{\"question\": \"Сколько идёт доставка в регионы?\"}"
+curl -X POST http://127.0.0.1:8000/ask \
+  -H "Authorization: Bearer customer-token" \
+  -H "Content-Type: application/json" \
+  -d "{\"question\": \"Сколько идёт доставка в регионы?\"}"
 ```
 
-Or without running a server:
+## Configuration
 
-```bash
-python -m scripts.ask_cli "Сколько идёт доставка в регионы?"
-```
+Settings live in `.env` (see `.env.example` for the full list):
 
-Questions outside the help articles (for example "В каком году основан ТехноМаркет?") get an honest "нет информации" reply instead of an invented one.
-
-### Switching to a real AI model
-
-Set these lines in `.env`:
-
-```ini
-# DeepSeek
-LLM_PROVIDER=openai_compatible
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=sk-...            # your key
-LLM_MODEL=deepseek-chat
-
-# or a model running on your own computer (Ollama)
-# LLM_BASE_URL=http://localhost:11434/v1
-# LLM_MODEL=qwen2.5:7b
-```
-
-Everything else stays the same: the service, the search, the evaluation.
-
-### Production storage (Postgres)
-
-```bash
-docker compose up -d
-# then set STORAGE_BACKEND=postgres in .env
-```
-
-
-## Measuring quality
-
-```bash
-python -m scripts.run_eval      # compares search modes, prints hit@1/3/5 and MRR
-python -m scripts.gate_report   # shows which confidence threshold to choose
-```
-
-The evaluation set is 56 questions written by hand: 51 with a known correct
-article and 5 that are deliberately **outside** the help articles.
-
-Results with the default settings (`intfloat/multilingual-e5-large`, 5 pieces in context):
-
-| Metric | Result | Notes |
+| Variable | Default | Meaning |
 |---|---|---|
-| hit@3 | **1.000** | The correct article is among the top 3 results for **every** question |
-| hit@1 | 0.941 | The correct article is the very first result for 48 of 51 questions |
-| MRR | 0.971 | On average the correct article appears almost at the very top |
-| out-of-scope questions | 2 of 5 refused | The confidence check stops some of the trick questions |
-| wrong refusals | **0 of 51** | Not a single real question was wrongly refused |
+| `EMBEDDING_MODEL` | `intfloat/multilingual-e5-large` | local embedding model (~2.25 GB, cached) |
+| `LLM_PROVIDER` | `mock` | `mock`, `openai_compatible` or `ollama` |
+| `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` | — | credentials of the answer model |
+| `STORAGE_BACKEND` | `sqlite` | `sqlite` (zero setup) or `postgres` (pgvector) |
+| `API_TOKEN_CUSTOMER`, `API_TOKEN_OPERATOR` | sample values | bearer tokens; change before exposing |
+| `HYBRID_ENABLED` | `true` | add keyword search to meaning search |
+| `RERANK_ENABLED` | `false` | second-stage reranking (measured slower and worse on this data) |
+| `MIN_RELEVANCE_SCORE` | `0.80` | below this the assistant refuses |
+| `CACHE_ENABLED`, `CACHE_TTL_SECONDS` | `true`, `900` | response cache |
 
-These numbers come from `python -m scripts.run_eval` and can be reproduced on any machine.
+## API
 
-### Why the defaults are what they are
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /health` | — | liveness and index size |
+| `GET /stats` | — | cache hit rate and latency percentiles |
+| `POST /ask` | bearer | one grounded answer (JSON) |
+| `POST /ask/stream` | bearer | the same, streamed as server-sent events |
+| `GET /` | — | chat page |
+| `GET /docs` | — | generated API documentation |
 
-1. **Adding keyword search made things worse at first** (hit@1 fell from 0.958 to 0.854). Reason: exact-word search without Russian word-form handling ("треснул" vs "трещины") pushed the *wrong* article up. This is a known weakness of the simple approach.
-2. **Giving the meaning search more weight** (and the keyword search less) brought the combined mode back to hit@1 = 0.941 — on par with meaning search alone.
-3. **Limiting to one piece per article** fixed a different problem: one long article used to fill 4 of the 5 context slots and push the correct article out.
-4. **Decision:** the default is meaning search + confidence check; the combined mode is available as a ready-to-use option for cases where exact terms matter more (product codes, model names) or when a lighter search model is used.
+`POST /ask` body: `{"question": "...", "top_k": 5, "history": [{"role": "user", "content": "..."}]}`.
+`history` is optional and limited to 12 messages; the role is taken from the token, never from the body.
 
-### Choosing the confidence threshold
+## Quality
 
-The best value sits between the worst good question (0.802) and the best
-out-of-scope question (0.830) — but the two groups overlap, so there is no
-perfect number. The chosen default (0.80) never wrongly refuses a real
-question and stops some of the trap questions. Refused questions skip the AI
-call entirely, so they cost nothing. This is deliberate: in customer support a
-wrong answer is worse than asking a colleague.
+The evaluation set is 56 hand-written questions: 51 answerable and 5 deliberately outside the help articles.
+
+```bash
+python -m scripts.run_eval      # compares retrieval modes
+python -m scripts.gate_report   # shows which confidence threshold to pick
+```
+
+| Metric | Result |
+|---|---|
+| hit@3 / hit@5 | **1.000** |
+| hit@1 | 0.941 |
+| MRR | 0.971 |
+| wrongly refused real questions | **0 of 51** |
+
+Measured decisions, in short:
+
+* Hybrid keyword search needed **Russian stemming** to reach parity with meaning search; without it, word forms such as "треснул"/"трещины" pulled the wrong article up.
+* A **cross-encoder reranker** made ranking worse (hit@1 0.941 → 0.843) and was 50× slower, so it is off by default; a threshold tuned for one scoring model does not transfer to another.
+* Refusing an answer **skips the model call entirely**, so refusals cost nothing.
+
+## Re-indexing
+
+```bash
+python -m scripts.ingest_kb          # incremental: only new/changed articles
+python -m scripts.ingest_kb --full   # rebuild everything
+```
+
+| Scenario (29-article corpus) | Re-embedded | Time |
+|---|---|---|
+| First build | 29 articles | 202 s |
+| No changes | **0** | **0.1 s** |
+| One article edited | 1 | 15 s |
+
+## Deployment
+
+```bash
+docker compose up -d          # application + Postgres with pgvector
+python -m scripts.smoke_api http://127.0.0.1:8000   # end-to-end check
+```
+
+`smoke_api` verifies the whole contract: no token → 401, customer sees public articles only, operator reaches internal ones, streaming emits sources → tokens → done, chat page is served.
 
 ## Project layout
 
 ```
-app/                 service code (reading articles, search, answer building, API)
-knowledge_base/      the help articles themselves (demo data)
-data/eval/           56 hand-written test questions
-scripts/             command-line helpers (index building, asking, evaluation)
-tests/               32 automatic tests
+app/                service code (articles, search, prompt, API, chat page)
+knowledge_base/     help articles (sample content, 29 articles / 8 sections)
+data/eval/          56 labelled questions
+scripts/            ingest, ask, evaluate, gate report, smoke test
+tests/              90 tests; the model is replaced by fakes, so CI needs no downloads
 ```
-
-### Access control
-
-The knowledge base contains internal articles (`audience: operator`: escalation
-rules, compensation limits). Clients must not be able to read them, so the
-**server** decides what a caller may search — the request body cannot influence
-it.
-
-Authenticate with a bearer token; the role determines the visible articles:
-
-| Token | Role | Sees |
-|---|---|---|
-| `API_TOKEN_CUSTOMER` | customer | public help articles only |
-| `API_TOKEN_OPERATOR` | operator | public **and** internal articles |
-
-```bash
-# customer: internal regulations are filtered out before the model sees them
-curl -X POST http://127.0.0.1:8000/ask \
-  -H "Authorization: Bearer customer-token" \
-  -H "Content-Type: application/json" \
-  -d "{\"question\": \"регламент эскалации обращений\"}"
-
-# operator: the same question reaches the internal article
-curl -X POST http://127.0.0.1:8000/ask \
-  -H "Authorization: Bearer operator-token" \
-  -H "Content-Type: application/json" \
-  -d "{\"question\": \"регламент эскалации обращений\"}"
-```
-
-Requests without a valid token receive `401`. Set `AUTH_ENABLED=false` only for
-local experiments; `API_TOKEN_*` values are read from the environment, so no
-secret is committed to the repository.
-
-### Performance
-
-```bash
-curl http://127.0.0.1:8000/stats
-```
-
-```json
-{"cache": {"entries": 1, "hits": 1, "misses": 1, "hit_rate": 0.5},
- "latency": {"count": 2, "avg_ms": 107.0, "p50_ms": 0.0, "p95_ms": 214.0, "max_ms": 214.0}}
-```
-
-* **Response cache.** Repeated questions are answered from memory: the second
-  call of the same question (any letter case) returns in **0 ms** instead of
-  ~200 ms. The cache key includes the audience, so an answer built from internal
-  articles can never be served to a customer. Entries expire after
-  `CACHE_TTL_SECONDS` and the cache evicts the oldest entry beyond
-  `CACHE_MAX_ENTRIES`, so memory stays bounded.
-* **Latency percentiles.** `/stats` reports `p50`/`p95`/`max` over the last
-  thousand requests. Percentiles are used instead of the average because a
-  single slow request barely moves the mean while being exactly what users
-  notice.
-
-### Re-indexing the knowledge base
-
-```bash
-python -m scripts.ingest_kb          # incremental: only new/changed articles
-python -m scripts.ingest_kb --full   # rebuild everything from scratch
-```
-
-Every article is hashed, so unchanged articles are skipped. Measured on the
-29-article corpus:
-
-| Scenario | Re-embedded articles | Time |
-|---|---|---|
-| First build (`--full`) | 29 | **202 s** |
-| Run with no changes | **0** | **0.1 s** |
-| One article edited | **1** | 15 s |
-| One article deleted | 0 (its chunks are removed) | 0.2 s |
-
-Two hashes make this correct rather than merely fast: *revision* detects text
-changes, and *fingerprint* (revision + chunk size + embedding model) also
-invalidates stored vectors when the model changes.
-
-### Deploying with Docker
-
-`docker-compose.yml` starts the production store (Postgres with the `pgvector`
-extension) with one command:
-
-```bash
-docker compose up -d
-```
-
-Then set `STORAGE_BACKEND=postgres` in `.env`. The application creates its
-schema on start-up and also adds columns that are missing from a database
-created by an earlier version (see `_migrate_schema` in `app/vectorstore.py`) —
-a deliberately small substitute for a full migration tool, which is the right
-next step once the schema starts changing often.
-
-Verify a deployment end to end (no token → 401, customer sees public articles
-only, operator reaches internal ones):
-
-```bash
-python -m scripts.smoke_api http://127.0.0.1:8000
-```
-
-## Troubleshooting
-
-**Windows: `ONNXRuntimeError: External data path escapes model directory`**
-
-Windows can store downloaded AI models as shortcuts (symlinks) pointing outside
-their folder, and the local model engine then refuses to load them. The project
-sets `HF_HUB_DISABLE_SYMLINKS=1` for you, so a fresh download is not affected.
-If you already hit the error, delete the downloaded cache and rebuild the index:
-
-```powershell
-Remove-Item "$env:TEMP\fastembed_cache" -Recurse -Force
-python -m scripts.ingest_kb
-```
-
-**First run downloads the search model** (~2.25 GB for `intfloat/multilingual-e5-large`).
-It is cached and reused afterwards. For a lighter setup set
-`EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (~0.5 GB).
-
-## Roadmap
-
-- [x] Read the help articles, split them, build the search index, answer with sources (`POST /ask`)
-- [x] Quality measurement: comparison of search modes, confidence-threshold report
-- [x] Combined meaning + keyword search, confidence check, one piece per article
-- [x] Optional re-ranking stage (measured: on this data it makes results worse and is 50× slower, so it stays off by default)
-- [x] Role-based access: clients cannot request internal articles any more
-- [x] Response cache (0 ms for repeated questions) and latency percentiles (`/stats`)
-- [x] Incremental re-indexing (202 s → 0.1 s when nothing changed)
-- [ ] Streaming answers and follow-up questions
-- [ ] Chat interface and public deployment
-- [ ] Russian word-form handling for the keyword search, then re-run the evaluation
 
 ## Notes
 
-The help articles are fictional texts written for this project; no third-party documentation is redistributed. Code license: MIT.
-
+The help articles are fictional sample content written for this project; no third-party documentation is redistributed. Code is MIT-licensed.

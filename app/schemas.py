@@ -2,7 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+from app.vectorstore import SearchHit
+
+# Dialogue length accepted from a client (messages, not turns): keeps prompts
+# bounded and prevents a caller from making us pay for a huge history.
+HISTORY_LIMIT = 12
+
+
+class ChatMessage(BaseModel):
+    """One earlier message, used to resolve follow-up questions."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=4000)
 
 
 class AskRequest(BaseModel):
@@ -20,6 +35,11 @@ class AskRequest(BaseModel):
         examples=["Сколько идёт доставка в регионы?"],
     )
     top_k: int | None = Field(default=None, ge=1, le=20)
+    history: list[ChatMessage] = Field(
+        default_factory=list,
+        max_length=HISTORY_LIMIT,
+        description="Previous messages, oldest first. Used to resolve follow-ups.",
+    )
 
 
 class SourceItem(BaseModel):
@@ -29,6 +49,21 @@ class SourceItem(BaseModel):
     category: str
     updated_at: str
     score: float
+
+
+def to_source_items(hits: list[SearchHit]) -> list[SourceItem]:
+    """Map retrieval hits to the public response shape (shared by both endpoints)."""
+    return [
+        SourceItem(
+            ref=ref,
+            slug=hit.chunk.slug,
+            title=hit.chunk.title,
+            category=hit.chunk.category,
+            updated_at=hit.chunk.updated_at,
+            score=round(hit.score, 4),
+        )
+        for ref, hit in enumerate(hits, start=1)
+    ]
 
 
 class AskResponse(BaseModel):
@@ -42,6 +77,7 @@ class AskResponse(BaseModel):
     retrieval: str = "vector"
     role: str = "customer"
     cached: bool = False
+    used_history: bool = False
 
 
 class StatsResponse(BaseModel):

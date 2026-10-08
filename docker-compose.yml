@@ -16,5 +16,33 @@ services:
       timeout: 3s
       retries: 10
 
+  app:
+    build: .
+    container_name: rag-support-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Point the application at the compose database instead of SQLite.
+      STORAGE_BACKEND: postgres
+      DATABASE_URL: postgresql+asyncpg://rag:rag@db:5432/rag
+      # Change these before exposing the service to anyone.
+      AUTH_ENABLED: "true"
+      API_TOKEN_CUSTOMER: customer-token
+      API_TOKEN_OPERATOR: operator-token
+      # Real answers: set your own provider, otherwise the offline mock is used.
+      LLM_PROVIDER: mock
+      LLM_BASE_URL: https://api.deepseek.com/v1
+      LLM_API_KEY: ""
+      LLM_MODEL: deepseek-chat
+    ports:
+      - "8000:8000"
+    volumes:
+      # Model cache and the SQLite database (used if you switch back to sqlite).
+      - model-cache:/models
+      - app-data:/data
+
 volumes:
   pgdata:
+  model-cache:
+  app-data:

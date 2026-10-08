@@ -2,8 +2,12 @@
 
 Why hand-rolled BM25 instead of FTS5/Elasticsearch at this stage: the corpus is
 small, the dev setup stays zero-dependency, and — the real reason — the ranking
-math is explicit, readable, and unit-testable. The Postgres path (Phase 3) will
-use ``tsvector`` + GIN index for the same purpose.
+math is explicit, readable, and unit-testable. The Postgres path will use
+``tsvector`` + GIN index for the same purpose.
+
+Stemming: Russian is heavily inflected, so exact-token matching treats
+"доставка" and "доставки" as unrelated words. ``tokenize(..., stemming=True)``
+applies :mod:`app.stemming` to collapse word forms before scoring.
 """
 
 from __future__ import annotations
@@ -12,12 +16,21 @@ import math
 import re
 from collections import Counter
 
+from app.stemming import stem_word
+
 TOKEN_RE = re.compile(r"[a-zа-яё0-9-]+", re.IGNORECASE)
 
 
-def tokenize(text: str) -> list[str]:
-    """Lowercase word tokenization that keeps Cyrillic, digits and hyphens."""
-    return TOKEN_RE.findall(text.lower())
+def tokenize(text: str, stemming: bool = False) -> list[str]:
+    """Lowercase word tokenization that keeps Cyrillic, digits and hyphens.
+
+    With ``stemming=True`` every token is reduced to its stem, so different
+    grammatical forms of one word match each other.
+    """
+    words = TOKEN_RE.findall(text.lower())
+    if not stemming:
+        return words
+    return [stem_word(word) for word in words]
 
 
 class BM25:

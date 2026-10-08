@@ -17,10 +17,12 @@ Correctness rules, which is where caches usually go wrong:
 
 from __future__ import annotations
 
+import hashlib
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from app.rag import AnswerResult
+from app.rag import AnswerResult, ChatTurn
 from app.vectorstore import SearchHit
 
 
@@ -46,10 +48,26 @@ class ResponseCache:
         self._misses = 0
 
     @staticmethod
-    def make_key(question: str, top_k: int, audience: str | None) -> str:
-        """Normalised key: case/whitespace-insensitive, audience-scoped."""
+    def make_key(
+        question: str,
+        top_k: int,
+        audience: str | None,
+        history_digest: str = "",
+    ) -> str:
+        """Normalised key: case/whitespace-insensitive, audience- and history-scoped."""
         normalised = " ".join(question.lower().split())
-        return f"{audience or '*'}|{top_k}|{normalised}"
+        parts = [audience or "*", str(top_k), normalised]
+        if history_digest:
+            parts.append(history_digest)
+        return "|".join(parts)
+
+    @staticmethod
+    def history_digest(history: Sequence[ChatTurn] = ()) -> str:
+        """Short fingerprint of the dialogue, so two contexts never share an answer."""
+        if not history:
+            return ""
+        payload = "\n".join(f"{turn.role}:{turn.content}" for turn in history)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
     def get(self, key: str) -> AnswerResult | None:
         entry = self._entries.get(key)
@@ -96,14 +114,30 @@ class CachedPipeline:
     def cache(self) -> ResponseCache:
         return self._cache
 
+    def answer_stream(self, question: str, top_k: int | None = None, audience=None, history=()):
+        """Delegate streaming to the wrapped pipeline.
+
+        Streaming deliberately bypasses the cache: the point of this endpoint is
+        the token flow, and a cached answer would arrive instantly in one piece.
+        """
+        return self._pipeline.answer_stream(
+            question, top_k=top_k, audience=audience, history=history
+        )
+
     async def answer(
         self,
         question: str,
         top_k: int | None = None,
         audience: str | None = "customer",
+        history: Sequence[ChatTurn] = (),
     ) -> AnswerResult:
         effective_top_k = top_k or self._default_top_k
-        key = self._cache.make_key(question, effective_top_k, audience)
+        key = self._cache.make_key(
+            question,
+            effective_top_k,
+            audience,
+            self._cache.history_digest(history),
+        )
         cached = self._cache.get(key)
         if cached is not None:
             # Report near-zero latency so callers can see the cache worked.
@@ -112,8 +146,11 @@ class CachedPipeline:
                 hits=cached.hits,
                 latency_ms=0,
                 refused=cached.refused,
+                used_history=cached.used_history,
             )
-        result = await self._pipeline.answer(question, top_k=top_k, audience=audience)
+        result = await self._pipeline.answer(
+            question, top_k=top_k, audience=audience, history=history
+        )
         self._cache.put(key, result)
         return result
 

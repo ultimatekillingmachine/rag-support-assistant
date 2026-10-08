@@ -152,6 +152,7 @@ class HybridRetriever:
         lexical_weight: float = 0.5,
         max_chunks_per_slug: int = 1,
         reranker: Reranker | None = None,
+        stemming: bool = True,
     ) -> None:
         self._store = store
         self._embedder = embedder
@@ -162,6 +163,7 @@ class HybridRetriever:
         self._lexical_weight = lexical_weight
         self._max_chunks_per_slug = max_chunks_per_slug
         self._reranker = reranker
+        self._stemming = stemming
 
     async def retrieve(
         self, query: str, top_k: int, audience: str | None = None
@@ -181,9 +183,12 @@ class HybridRetriever:
         if not chunks:
             return []
 
-        # Lexical candidates over the same audience-filtered corpus.
-        corpus = [tokenize(f"{chunk.title} {chunk.text}") for chunk in chunks]
-        lexical_scores = BM25(corpus).scores(tokenize(query))
+        # Lexical candidates over the same audience-filtered corpus. Stemming
+        # collapses Russian word forms, so "треснул" also matches "трещины".
+        corpus = [
+            tokenize(f"{chunk.title} {chunk.text}", stemming=self._stemming) for chunk in chunks
+        ]
+        lexical_scores = BM25(corpus).scores(tokenize(query, stemming=self._stemming))
         lexical_order = sorted(
             range(len(chunks)), key=lambda index: -lexical_scores[index]
         )[: self._candidate_pool]
@@ -246,6 +251,7 @@ def create_retriever(store: VectorStore, embedder: Embedder, config) -> Retrieve
             lexical_weight=config.lexical_weight,
             max_chunks_per_slug=config.max_chunks_per_slug,
             reranker=reranker,
+            stemming=config.lexical_stemming,
         )
     return VectorRetriever(
         store,
